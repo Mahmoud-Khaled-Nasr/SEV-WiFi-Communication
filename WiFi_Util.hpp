@@ -38,41 +38,29 @@ void send_packet(IPAddress receiving_address, int receiving_port, char* packet){
     udp_g.endPacket();
 }
 
-char receive_packet(){
+void receive_packet(IPAddress& remote_IP, int& remote_port, int& message_length){
   int packet_size = udp_g.parsePacket();
   if (packet_size)
   {
     // receive incoming UDP packets
+    remote_IP = udp_g.remoteIP();
+    remote_port = udp_g.remotePort();
     log_message(
       String("Received ") + 
       String(packet_size) + 
       String("bytes from ") + 
-      udp_g.remoteIP().toString() + 
+      remote_IP.toString() + 
       String(" port ") + 
-      String(udp_g.remotePort()) + 
+      String(remote_port) + 
       String("\n"));
-    int len = udp_g.read(udp_input_buffer_g, INPUT_BUFFER_SIZE_C);
-    if (len > 0)
-    {
-      udp_input_buffer_g[len] = 0;
+    message_length = udp_g.read(udp_input_buffer_g, INPUT_BUFFER_SIZE_C);
+    if (message_length > 0) {
+      udp_input_buffer_g[message_length] = 0;
     }
     log_message(
       String("UDP packet contents: ") + 
       String(udp_input_buffer_g) + 
       String("\n") );
-
-    if (len > 2){
-      log_message(String("ERROR in the reveived packet\n"));
-    }else if (udp_input_buffer_g[0] == STARTING_SEQUENCE_C){
-      clients_count_g++;
-    }else if (udp_input_buffer_g[0] == ENDING_SEQUENCE_C){
-      clients_count_g--;
-    }else {
-      log_message(String("ERROR in the parsing the packet\n"));
-    }
-    // send back a reply, to the IP address and port we got the packet from
-    char reply_packet[] = "received";
-    send_packet(udp_g.remoteIP(),  udp_g.remotePort(), reply_packet);
   }
 }
 
