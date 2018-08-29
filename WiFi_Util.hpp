@@ -3,10 +3,18 @@
 #include<ESP8266WiFi.h>
 #include<WiFiUdp.h>
 
-#include "Constants.hpp"
+const char* AP_NAME_C = "SEV_CUT";  // The name of the AP network
+const char* AP_PASSWORD_C = "password";  // The password of the AP
 
 WiFiUDP udp_g;
+const int LOCAL_UDP_PORT_C = 4210;
+
 IPAddress broadcast_IP_g;
+const int BROADCAST_PORT_C = 4211;
+
+const int INPUT_BUFFER_SIZE_C = 10;
+char udp_input_buffer_g[INPUT_BUFFER_SIZE_C];
+int current_udp_input_buffer_size_g = 0;
 
 void init_wifi(){
   WiFi.softAP(AP_NAME_C, AP_PASSWORD_C);
@@ -38,7 +46,13 @@ void send_packet(IPAddress receiving_address, int receiving_port, char* packet){
     udp_g.endPacket();
 }
 
-void receive_packet(IPAddress& remote_IP, int& remote_port, int& message_length){
+void send_packet(IPAddress receiving_address, int receiving_port, unsigned char* packet, int packet_length){
+    udp_g.beginPacket(receiving_address, receiving_port);
+    udp_g.write(packet, packet_length);
+    udp_g.endPacket();
+}
+
+bool receive_packet(IPAddress& remote_IP, int& remote_port, int& message_length){
   int packet_size = udp_g.parsePacket();
   if (packet_size)
   {
@@ -61,6 +75,33 @@ void receive_packet(IPAddress& remote_IP, int& remote_port, int& message_length)
       String("UDP packet contents: ") + 
       String(udp_input_buffer_g) + 
       String("\n") );
+    // message reveived
+    return true;
+  }else{
+    return false;
+  }
+}
+
+int receive_handshake_packet(){
+  IPAddress remote_IP;
+  int len, remote_port, result;
+  bool is_received = receive_packet(remote_IP, remote_port, len);
+  if (is_received){
+    if (len > 2){
+      log_message(String("ERROR in the reveived packet\n"));
+    }else if (udp_input_buffer_g[0] == STARTING_SEQUENCE_C){
+      result = 1;
+    }else if (udp_input_buffer_g[0] == ENDING_SEQUENCE_C){
+      result = -1;
+    }else {
+      log_message(String("ERROR in the parsing the packet\n"));
+    }
+    // send back a reply, to the IP address and port we got the packet from
+    char reply_packet[] = "received";
+    send_packet(remote_IP, remote_port, reply_packet);
+    return result;
+  }else {
+    return 0;
   }
 }
 

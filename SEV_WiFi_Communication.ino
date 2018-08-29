@@ -1,11 +1,25 @@
-#include "Constants.hpp"
-#include "Logger.hpp"
+#include "Serial_Interface.hpp"
 #include "WiFi_Util.hpp"
 #include "Tests.hpp"
 
-void init_serial(){
-  Serial.begin(AT_BAUD_RATE_C);
-  log_message(String("Serial is up and running \n"));
+int clients_count_g = 0;
+const int SERIAL_WIFI_DATA_BUFFER_MAX_SIZE_C = 100;
+unsigned char serial_wifi_data_buffer_g[SERIAL_WIFI_DATA_BUFFER_MAX_SIZE_C];
+int serial_wifi_data_buffer_current_size_g = 0;
+
+void broadcast_data_buffer(){
+  send_packet(broadcast_IP_g, BROADCAST_PORT_C, serial_wifi_data_buffer_g, serial_wifi_data_buffer_current_size_g);
+}
+
+bool add_byte_to_data_buffer (byte new_byte){
+  serial_wifi_data_buffer_g[serial_wifi_data_buffer_current_size_g] = new_byte;
+  serial_wifi_data_buffer_current_size_g++;
+  if( serial_wifi_data_buffer_current_size_g == SERIAL_WIFI_DATA_BUFFER_MAX_SIZE_C){
+    serial_wifi_data_buffer_current_size_g = 0;
+    return true;
+  }else{
+    return false;
+  }
 }
 
 void setup() {
@@ -14,35 +28,34 @@ void setup() {
   init_wifi();
 }
 
-void log_loop(){
-  log_message(
-    String("number of clients ") + 
-    String(clients_count_g) + 
-    String("\n"));
-}
-
-void receive_handshake_packet(){
-  IPAddress remote_IP;
-  int len, remote_port;
-  receive_packet(remote_IP, remote_port, len);
-  if (len > 2){
-    log_message(String("ERROR in the reveived packet\n"));
-  }else if (udp_input_buffer_g[0] == STARTING_SEQUENCE_C){
-    clients_count_g++;
-  }else if (udp_input_buffer_g[0] == ENDING_SEQUENCE_C){
-    clients_count_g--;
-  }else {
-    log_message(String("ERROR in the parsing the packet\n"));
-  }
-  // send back a reply, to the IP address and port we got the packet from
-  char reply_packet[] = "received";
-  send_packet(remote_IP, remote_port, reply_packet);
-}
-
+// TODO add support for deep sleep
 void loop() {
   //log_loop();
-  receive_handshake_packet();
-  if(clients_count_g > 0){
-    
+  int result = receive_handshake_packet();
+
+  if (clients_count_g == 0 && result == 1){
+    start_serial();
+  }else if (clients_count_g == 1 && result == -1){
+    end_serial();
+  }
+  clients_count_g += result;
+  
+  if (clients_count_g > 0){
+    byte b = receive_serial_byte();
+    bool is_full = add_byte_to_data_buffer(b);
+    if (is_full){
+      end_serial();
+      broadcast_data_buffer();
+      start_serial();
+    }
   }
 }
+
+
+
+
+
+
+
+
+
